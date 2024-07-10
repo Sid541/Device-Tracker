@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Device Tracker</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Arial', sans-serif; /* Change 'Arial' to your preferred font family */
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f2f2f2; /* Light gray background */
+        }
+        h1 {
+            font-family: 'Georgia', serif; /* Change 'Georgia' to your preferred heading font family */
+            text-align: center;
+            background-color: #355E3B; /* Colored background */
+            color: #ffffff; /* White text color */
+            padding: 10px 0; /* Padding around the heading */
+            margin: 0; /* Remove default margin */
+        }
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Device Tracking</h1>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        var map = L.map('map').setView([0, 0], 2); // Temporary default view
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Siddharth kr'
+        }).addTo(map);
+
+        var socket = io();
+        var userMarker;
+        var deviceMarkers = {};
+
+        // Function to handle success of geolocation
+        function handleLocationUpdate(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+
+            if (!userMarker) {
+                // Create a new marker for the initial location
+                userMarker = L.marker([lat, lng]).addTo(map).bindPopup('You are here').openPopup();
+                map.setView([lat, lng], 13); // Center the map on the initial location
+            } else {
+                // Update the marker position for subsequent updates
+                userMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 13); // Keep centering the map
+            }
+
+            var deviceId = 'device1'; // You can generate a unique ID for each device if needed
+            socket.emit('updateLocation', { deviceId, lat, lng });
+        }
+
+        // Function to handle error of geolocation
+        function handleLocationError(error) {
+            console.error('Error getting location: ' + error.message);
+        }
+
+        // Get current location and watch for changes
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                handleLocationUpdate(position);
+                // Update location every 5 seconds
+                setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(handleLocationUpdate, handleLocationError);
+                }, 5000);
+            }, handleLocationError);
+        } else {
+            console.error('Geolocation is not supported by this browser.');
+        }
+
+        socket.on('locationUpdate', function(deviceLocations) {
+            for (var deviceId in deviceLocations) {
+                var location = deviceLocations[deviceId];
+                if (deviceId === 'device1') {
+                    // Update user marker
+                    if (userMarker) {
+                        userMarker.setLatLng([location.lat, location.lng]);
+                    } else {
+                        userMarker = L.marker([location.lat, location.lng]).addTo(map).bindPopup('You are here').openPopup();
+                    }
+                } else {
+                    // Update device markers
+                    if (deviceMarkers[deviceId]) {
+                        deviceMarkers[deviceId].setLatLng([location.lat, location.lng]);
+                    } else {
+                        deviceMarkers[deviceId] = L.marker([location.lat, location.lng]).addTo(map).bindPopup(`<b>Device ${deviceId}</b><br>Lat: ${location.lat}<br>Lng: ${location.lng}`);
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
